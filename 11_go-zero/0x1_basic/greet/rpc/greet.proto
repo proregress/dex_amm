@@ -1,0 +1,21 @@
+// greet.proto - gRPC 服务定义文件
+// 这个文件定义了 RPC 服务的接口规范
+// 使用 Protocol Buffers (protobuf) 定义服务接口和消息格式
+// go-zero 会根据此文件生成 Go 代码
+
+syntax = "proto3";
+
+package ping;
+option go_package = "./pb";
+
+// Placeholder - 占位符消息类型
+// 用于不需要传递参数的 RPC 调用（如健康检查）
+message Placeholder{}
+
+// Greet - RPC 服务定义
+// 定义了可被其他服务调用的 RPC 方法
+service Greet {
+    // ping - RPC 方法，用于健康检查或服务间通信
+    // 参数和返回值都是 Placeholder（空消息）
+    rpc ping (Placeholder) returns (Placeholder);
+}

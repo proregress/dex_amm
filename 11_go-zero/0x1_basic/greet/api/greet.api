@@ -1,0 +1,19 @@
+// greet.api - API 定义文件
+// 这个文件定义了服务的 API 接口规范，go-zero 会根据这个文件自动生成路由、处理器等代码
+// 使用 goctl 工具可以根据此文件生成完整的项目结构
+
+syntax = "v1"
+
+// resp - 响应类型定义
+// 定义了 ping 接口返回的数据结构
+type resp {
+	msg string `json:"msg"`
+}
+
+// service greet - 服务定义
+// 定义了名为 greet 的服务，包含一个 ping 接口
+service greet {
+	@handler ping  // 指定使用 ping 处理器处理此路由
+	get /ping returns (resp)  // 定义 GET 方法的路由 /ping，返回 resp 类型
+}
+

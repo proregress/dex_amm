@@ -1,0 +1,23 @@
+// 使用 Protocol Buffers 版本 3 语法
+syntax = "proto3";
+
+// 定义包名
+package hello;
+
+// 指定生成的 Go 代码的包路径
+option go_package = "./hello";
+
+// 请求消息，用于 Ping 方法的请求参数
+message Request {
+}
+
+// 响应消息，用于 Ping 方法的返回结果
+message Response {
+    string msg = 1; // 响应消息内容
+}
+
+// Hello 服务定义
+service Hello {
+    // Ping 方法：用于测试服务是否可用
+    rpc Ping(Request) returns(Response);
+}

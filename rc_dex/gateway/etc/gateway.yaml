@@ -10,9 +10,9 @@ Upstreams: # upstreams
 #        Key: greet.grpc # the discovery key
     # protoset mode
     ProtoSets:
-      - hello.pb
+      - hello_server.pb # 修改为hello_server.pb
     # Mappings can also be written in proto options
-#    Mappings: # routes mapping
-#      - Method: get
-#        Path: /ping
-#        RpcPath: hello.Hello/Ping
+    Mappings: # routes mapping
+      - Method: get
+        Path: /ping
+        RpcPath: hello.Hello/Ping

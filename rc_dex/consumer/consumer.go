@@ -26,6 +26,7 @@ func main() {
 	conf.MustLoad(*configFile, &c)
 	ctx := svc.NewServiceContext(c)
 
+	// 此s是consumer服务的server
 	// 创建service组：实现多个服务的统一管理
 	group := service.NewServiceGroup()
 	defer group.Stop()

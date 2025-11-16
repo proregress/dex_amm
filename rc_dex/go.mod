@@ -3,6 +3,7 @@ module richcode.cc/dex
 go 1.24.7
 
 require (
+	github.com/gorilla/websocket v1.5.0
 	github.com/zeromicro/go-zero v1.9.2
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.10

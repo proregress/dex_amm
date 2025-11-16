@@ -4,3 +4,13 @@ ListenOn: 0.0.0.0:8080
 #   Hosts:
 #   - 127.0.0.1:2379
 #   Key: consumer.rpc
+
+# 增加 Solana 区块链配置，映射到config.go中的Chain结构体
+Sol:
+  ChainId: 100000
+  # RPC 节点 URL 列表，用于 HTTP 请求
+  NodeUrl:
+    - "https://devnet.helius-rpc.com/?api-key=61d69ace-ffca-4707-b16c-0775eac2041e"
+  # WebSocket URL，用于实时订阅和监听
+  WSUrl: "wss://devnet.helius-rpc.com/?api-key=61d69ace-ffca-4707-b16c-0775eac2041e"
+  

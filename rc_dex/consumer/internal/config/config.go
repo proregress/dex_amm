@@ -2,6 +2,13 @@ package config
 
 import "github.com/zeromicro/go-zero/zrpc"
 
+// 不知道在哪里使用，先注释掉
+// var Cfg Config
+
+// var (
+// 	SolRpcUseFrequency int
+// )
+
 type Config struct {
 	zrpc.RpcServerConf
 

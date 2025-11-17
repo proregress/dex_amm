@@ -9,6 +9,7 @@ import (
 
 	"github.com/blocto/solana-go-sdk/client"
 	"github.com/blocto/solana-go-sdk/rpc"
+	"github.com/blocto/solana-go-sdk/types"
 	"github.com/duke-git/lancet/v2/slice"
 	"github.com/gorilla/websocket"
 	"github.com/mr-tron/base58"
@@ -21,6 +22,8 @@ import (
 )
 
 var ErrServiceStop = errors.New("service stop")
+
+var ErrUnknowProgram = errors.New("unknow program")
 
 type BlockService struct {
 	Name string
@@ -116,7 +119,7 @@ func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
 		return
 	}
 
-	// 通过slice组件遍历transactions，拿到每一个交易对象
+	// 通过slice组件遍历transactions，拿到每一个交易对象tx
 	slice.ForEach(blockInfo.Transactions, func(index int, tx client.BlockTransaction) {
 		if len(tx.Transaction.Signatures) > 0 {
 			sig858 := base58.Encode(tx.Transaction.Signatures[0])
@@ -124,4 +127,46 @@ func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
 			// 交易过滤（合约id）/指令过滤
 		}
 	})
+}
+
+func DecodeTx(tx *client.BlockTransaction) {
+	if tx == nil {
+		return
+	}
+
+	// Instructions是交易中的所有指令，遍历每一个指令inst
+	for i := range tx.Transaction.Message.Instructions {
+		inst := &tx.Transaction.Message.Instructions[i]
+		err := DecodeInstruction(inst, tx)
+		if err != nil {
+			return
+		}
+	}
+}
+
+func DecodeInstruction(inst *types.CompiledInstruction, tx *client.BlockTransaction) (err error) {
+	if inst == nil {
+		return errors.New("instruction is null")
+	}
+
+	if len(tx.AccountKeys) == 0 {
+		return errors.New("account keys is empty")
+	}
+
+	// AccountKeys是当前交易中的所有指令的账户id
+	// ProgramIDIndex是当前指令的账户id索引
+	program := tx.AccountKeys[inst.ProgramIDIndex].String()
+	// 根据programID，调用不同的解码函数
+
+	// 过滤
+	switch program {
+	case ProgramStrPumpFun:
+		return DecodePumpFunInstruction(inst, tx)
+	case ProgramStrPumpFunAMM:
+		return DecodePumpFunAMMInstruction(inst, tx)
+	case ProgramStrRaydium:
+		return DecodeRaydiumInstruction(inst, tx)
+	default:
+		return ErrUnknowProgram
+	}
 }

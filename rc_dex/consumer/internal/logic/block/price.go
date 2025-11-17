@@ -11,7 +11,7 @@ import (
 )
 
 func GetSolBlockInfoDelay(c *client.Client, ctx context.Context, slot uint64) (resp *client.Block, err error) {
-	// 减少helius调用，因为失败也算次数
+	// 减少helius调用，因为失败也算次数，仅在开发网使用，主网不用delay
 	time.Sleep(time.Second * 1)
 	return GetSolBlockInfo(c, ctx, slot)
 }

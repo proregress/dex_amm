@@ -5,6 +5,9 @@ ListenOn: 0.0.0.0:8080
 #   - 127.0.0.1:2379
 #   Key: consumer.rpc
 
+ConsumerConfig:
+  Concurrency: 1
+
 # 增加 Solana 区块链配置，映射到config.go中的Chain结构体
 Sol:
   ChainId: 100000

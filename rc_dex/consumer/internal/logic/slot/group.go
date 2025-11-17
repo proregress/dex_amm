@@ -23,8 +23,8 @@ type SlotAndSlotWsService struct {
 	Ws           *SlotWsService
 }
 
-func NewSlotAndSlotWsService(sc *svc.ServiceContext) *SlotAndSlotWsService {
-	slotService := NewSlotService(sc)
+func NewSlotAndSlotWsService(sc *svc.ServiceContext, slotChannel chan uint64) *SlotAndSlotWsService {
+	slotService := NewSlotService(sc, slotChannel)
 	return &SlotAndSlotWsService{
 		SlotService: slotService,
 		Ws:          NewSlotWsService(slotService),

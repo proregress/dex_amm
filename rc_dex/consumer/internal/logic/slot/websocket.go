@@ -103,6 +103,8 @@ func (s *SlotService) ReadSlotMessage() {
 	}
 	// slot不为0，需要处理
 	s.maxSlot = resp.Params.Result.Slot
+	// 往channel中写入数据
+	s.realtimeChannel <- s.maxSlot // 若channel中写入了缓冲区大小的数据，比如缓冲区大小为5，这里写入了5个，同时没有被消费，则会阻塞，无法再写入数据
 	s.Infof("ReadSlotMessage: message: %v", string(message))
 	fmt.Println("lastest slot: ", s.maxSlot)
 }

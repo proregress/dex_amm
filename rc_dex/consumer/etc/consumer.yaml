@@ -17,3 +17,9 @@ Sol:
   # WebSocket URL，用于实时订阅和监听
   WSUrl: "wss://devnet.helius-rpc.com/?api-key=61d69ace-ffca-4707-b16c-0775eac2041e"
   
+Mysql:
+  User: root
+  Password: "123456"
+  Host: localhost
+  Port: 3306
+  DBname: rc_dex_study

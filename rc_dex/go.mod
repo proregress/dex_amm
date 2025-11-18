@@ -6,11 +6,14 @@ require (
 	github.com/blocto/solana-go-sdk v1.30.0
 	github.com/duke-git/lancet/v2 v2.3.8
 	github.com/gorilla/websocket v1.5.0
+	github.com/klen-ygs/gorm-zero v1.3.3
 	github.com/mr-tron/base58 v1.2.0
 	github.com/panjf2000/ants/v2 v2.11.3
 	github.com/zeromicro/go-zero v1.9.2
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.10
+	gorm.io/driver/mysql v1.5.4
+	gorm.io/gorm v1.31.1
 )
 
 require (
@@ -35,6 +38,7 @@ require (
 	github.com/go-openapi/jsonpointer v0.19.6 // indirect
 	github.com/go-openapi/jsonreference v0.20.2 // indirect
 	github.com/go-openapi/swag v0.22.4 // indirect
+	github.com/go-sql-driver/mysql v1.9.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
@@ -46,6 +50,8 @@ require (
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.9 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0 // indirect
 	github.com/jhump/protoreflect v1.17.0 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect

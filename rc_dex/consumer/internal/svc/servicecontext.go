@@ -10,7 +10,10 @@ import (
 	solclient "github.com/blocto/solana-go-sdk/client"
 	"github.com/blocto/solana-go-sdk/rpc"
 	"github.com/zeromicro/go-zero/core/logx"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 	"richcode.cc/dex/consumer/internal/config"
+	"richcode.cc/dex/model/solmodel"
 )
 
 // ServiceContext - 服务上下文结构体
@@ -25,6 +28,9 @@ type ServiceContext struct {
 	solClientIndex int
 	solClient      *solclient.Client
 	solClients     []*solclient.Client
+
+	/* 区块模型 */
+	BlockModel solmodel.BlockModel
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
@@ -44,10 +50,29 @@ func NewSolServiceContext(c config.Config) *ServiceContext {
 			Timeout: 10 * time.Second,
 		})))
 	}
+
+	// 读取配置信息，初始化数据库连接
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", // 字符串格式化方式，将配置信息拼接成dsn字符串，即mysql的连接地址
+		c.MySQLConfig.User,
+		c.MySQLConfig.Password,
+		c.MySQLConfig.Host,
+		c.MySQLConfig.Port,
+		c.MySQLConfig.DBName,
+	)
+	// 使用mysql驱动连接数据库gorm
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{}) // 建立连接
+	if err != nil {
+		panic(fmt.Sprintf("failed to connect database: %v", err))
+	}
+
+	// Initialize BlockModel
+	blockModel := solmodel.NewBlockModel(db)
+
 	fmt.Println("solClients: ", c.Sol.NodeUrl)
 	return &ServiceContext{
 		Config:     c,
 		solClients: solClients,
+		BlockModel: blockModel,
 	}
 }
 

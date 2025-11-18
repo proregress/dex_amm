@@ -12,12 +12,12 @@ import (
 	"github.com/blocto/solana-go-sdk/types"
 	"github.com/duke-git/lancet/v2/slice"
 	"github.com/gorilla/websocket"
-	"github.com/mr-tron/base58"
 	"github.com/panjf2000/ants/v2"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/threading"
 	"richcode.cc/dex/consumer/internal/config"
 	"richcode.cc/dex/consumer/internal/svc"
+	"richcode.cc/dex/model/solmodel"
 	"richcode.cc/dex/pkg/constants"
 )
 
@@ -109,8 +109,15 @@ func (s *BlockService) GetBlockFromHttp() {
 }
 
 func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
+	// 监听
+	beginTime := time.Now()
 	if slot == 0 {
 		return
+	}
+
+	// 创建block对象
+	block := &solmodel.Block{
+		Slot: slot,
 	}
 
 	blockInfo, err := GetSolBlockInfoDelay(s.sc.GetSolClient(), ctx, uint64(slot))
@@ -118,15 +125,33 @@ func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
 		fmt.Println("err :", err)
 		return
 	}
+	// 从上面拿到的blockInfo将信息设置进block对象中
+	if blockInfo.BlockTime != nil {
+		block.BlockTime = *blockInfo.BlockTime
+		blockTime := blockInfo.BlockTime.Format("2006-01-02 15:04:05")
+		s.Infof("processBlock:%v getBlockInfo blockTime: %v,cur: %v, dur: %v, queue size: %v", slot, blockTime, time.Now().Format("15:04:05"), time.Since(beginTime), len(s.slotChannel))
+	} else {
+		s.Infof("processBlock:%v getBlockInfo blockTime is nil,cur: %v, dur: %v, queue size: %v", slot, time.Now().Format("15:04:05"), time.Since(beginTime), len(s.slotChannel))
+	}
+
+	if blockInfo.BlockHeight != nil {
+		block.BlockHeight = *blockInfo.BlockHeight
+	}
+	block.Status = constants.BlockProcessed
+
+	// TODO: 获取 sol 价格
+	block.SolPrice = 0
 
 	// 通过slice组件遍历transactions，拿到每一个交易对象tx
 	slice.ForEach(blockInfo.Transactions, func(index int, tx client.BlockTransaction) {
-		if len(tx.Transaction.Signatures) > 0 {
-			sig858 := base58.Encode(tx.Transaction.Signatures[0])
-			fmt.Println("Transaction signature: ", sig858)
-			// 交易过滤（合约id）/指令过滤
-		}
+		DecodeTx(&tx)
 	})
+
+	// 将block对象插入数据库
+	err = s.sc.BlockModel.Insert(ctx, block)
+	if err != nil {
+		s.Error("insert block error", err)
+	}
 }
 
 func DecodeTx(tx *client.BlockTransaction) {

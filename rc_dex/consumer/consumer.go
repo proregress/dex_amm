@@ -25,6 +25,7 @@ func main() {
 
 	var c config.Config
 	conf.MustLoad(*configFile, &c)
+	config.SaveConf(c)
 	ctx := svc.NewServiceContext(c)
 
 	// 此s是consumer服务的server

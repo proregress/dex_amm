@@ -14,9 +14,19 @@ var SolRpcUseFrequency int
 type Config struct {
 	zrpc.RpcServerConf
 
+	MySQLConfig MySQLConfig `json:"Mysql"`
+
 	Sol Chain `json:"Sol,optional"`
 
 	ConsumerConfig ConsumerConfig `json:"ConsumerConfig,optional"`
+}
+
+type MySQLConfig struct {
+	User     string `json:"User"     json:",env=MYSQL_USER"`
+	Password string `json:"Password" json:",env=MYSQL_PASSWORD"`
+	Host     string `json:"Host"     json:",env=MYSQL_HOST"`
+	Port     int    `json:"Port"     json:",env=MYSQL_PORT"`
+	DBName   string `json:"DBname"   json:",env=MYSQL_DBNAME"`
 }
 
 type ConsumerConfig struct {
@@ -31,6 +41,10 @@ type Chain struct {
 	WSUrl      string   `json:"WSUrl,optional"      env:"SOL_WSURL"`
 	MEVNodeUrl string   `json:"MevNodeUrl,optional" env:"SOL_MEVNODEURL"`
 	StartBlock uint64   `json:"StartBlock,optional" env:"SOL_STARTBLOCK"`
+}
+
+func SaveConf(c Config) {
+	Cfg = c
 }
 
 /*

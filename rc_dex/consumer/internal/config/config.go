@@ -30,7 +30,8 @@ type MySQLConfig struct {
 }
 
 type ConsumerConfig struct {
-	Concurrency int `json:"Concurrency" env:"CONSUMER_CONCURRENCY"`
+	Concurrency             int `json:"Concurrency" env:"CONSUMER_CONCURRENCY"`
+	NotCompletedConcurrency int `json:"NotCompletedConcurrency" json:",env=CONSUMER_NOTCOMPLETED_CONCURRENCY"`
 }
 
 // json 标签 → 匹配 YAML/JSON 配置文件

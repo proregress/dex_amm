@@ -46,16 +46,23 @@ func main() {
 	{
 		// 消息队列
 		slotChannel := make(chan uint64, 50) // chan：通达类型关键字；uint64: 通道中传输的数据类型; 50: 通道的容量，即最多可以缓存50个数据；size=0时，通道是无缓冲的，即只能缓存1个数据
+		errChannel := make(chan uint64, 1)   // 用于处理那些失败了的区块
+
 		// 消费者：多个消费者并发消费
 		for i := 0; i < c.ConsumerConfig.Concurrency; i++ {
 			group.Add(block.NewBlockService(ctx, "block-real", slotChannel, i))
 		}
 
+		// 消费者：专门用来处理那些失败了的区块
+		for i := 0; i < c.ConsumerConfig.NotCompletedConcurrency; i++ {
+			group.Add(block.NewBlockService(ctx, "block-failed", errChannel, i))
+		}
+
 		// 增加生产者服务：获取最新的slot
 		// 依赖注入：把 ctx 作为参数传进去，而不是让这些服务自己创建
-		// group.Add(slot.NewSlotAndSlotWsService(ctx)) // 目前NewSlotAndSlotWsService没啥作用，可以跳过它直接使用SlotWsService，因此先注释掉
-		slotService := slot.NewSlotService(ctx, slotChannel)
-		group.Add(slot.NewSlotWsService(slotService))
+		group.Add(slot.NewSlotAndSlotWsService(ctx, slotChannel, errChannel)) // 目前NewSlotAndSlotWsService没啥作用，可以跳过它直接使用SlotWsService，因此先注释掉
+		// slotService := slot.NewSlotService(ctx, slotChannel)
+		// group.Add(slot.NewSlotWsService(slotService))
 	}
 
 	fmt.Printf("Starting rpc server at %s...\n", c.ListenOn)

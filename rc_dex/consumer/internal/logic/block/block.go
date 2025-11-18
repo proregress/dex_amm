@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/blocto/solana-go-sdk/client"
@@ -117,12 +118,19 @@ func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
 
 	// 创建block对象
 	block := &solmodel.Block{
-		Slot: slot,
+		Slot:   slot,
+		Status: constants.BlockFailed,
 	}
 
 	blockInfo, err := GetSolBlockInfoDelay(s.sc.GetSolClient(), ctx, uint64(slot))
 	if err != nil || blockInfo == nil {
-		fmt.Println("err :", err)
+		fmt.Println("get block info error: ", err)
+
+		if strings.Contains(err.Error(), "was skipped") { // 区块里没有任何有意义的交易（比如只有一些打包信息投票信息啥的）
+			block.Status = constants.BlockSkipped
+		}
+
+		_ = s.sc.BlockModel.Insert(ctx, block)
 		return
 	}
 	// 从上面拿到的blockInfo将信息设置进block对象中

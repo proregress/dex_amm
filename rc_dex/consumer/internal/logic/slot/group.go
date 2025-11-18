@@ -21,13 +21,15 @@ import "richcode.cc/dex/consumer/internal/svc"
 type SlotAndSlotWsService struct {
 	*SlotService // 这里通过嵌入 *SlotService 获得了它的 Stop() 方法
 	Ws           *SlotWsService
+	NotCompleted *RecoverFailedBlockService
 }
 
-func NewSlotAndSlotWsService(sc *svc.ServiceContext, slotChannel chan uint64) *SlotAndSlotWsService {
-	slotService := NewSlotService(sc, slotChannel)
+func NewSlotAndSlotWsService(sc *svc.ServiceContext, slotChannel chan uint64, errChannel chan uint64) *SlotAndSlotWsService {
+	slotService := NewSlotService(sc, slotChannel, errChannel)
 	return &SlotAndSlotWsService{
-		SlotService: slotService,
-		Ws:          NewSlotWsService(slotService),
+		SlotService:  slotService,
+		Ws:           NewSlotWsService(slotService),
+		NotCompleted: NewRecoverFailedBlockService(slotService),
 	}
 }
 
@@ -36,4 +38,5 @@ func NewSlotAndSlotWsService(sc *svc.ServiceContext, slotChannel chan uint64) *S
 // 我们需要调用 Ws.Start() 来启动 WebSocket 服务
 func (s *SlotAndSlotWsService) Start() {
 	s.Ws.Start()
+	s.NotCompleted.Start()
 }

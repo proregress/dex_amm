@@ -24,9 +24,11 @@ type SlotService struct {
 	maxSlot uint64
 
 	realtimeChannel chan uint64
+
+	errChannel chan uint64
 }
 
-func NewSlotService(sc *svc.ServiceContext, slotChannel chan uint64) *SlotService {
+func NewSlotService(sc *svc.ServiceContext, slotChannel chan uint64, errChannel chan uint64) *SlotService {
 	// context.WithCancelCause 返回：1. ctx：可取消的上下文 2.cancel func(error)：取消函数，可携带错误原因
 	ctx, cancel := context.WithCancelCause(context.Background())
 	return &SlotService{
@@ -35,6 +37,7 @@ func NewSlotService(sc *svc.ServiceContext, slotChannel chan uint64) *SlotServic
 		ctx:             ctx,    // ctx 是上下文，goroutine 通过监听 ctx.Done() 感知取消
 		cancel:          cancel, // cancel函数用于取消上下文，调用后ctx.Done()会返回一个已关闭的channel，ctx.Err() 返回取消原因（通过 context.Cause(ctx) 获取）
 		realtimeChannel: slotChannel,
+		errChannel:      errChannel,
 	}
 }
 

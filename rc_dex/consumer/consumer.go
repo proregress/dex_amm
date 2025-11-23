@@ -26,7 +26,7 @@ func main() {
 	var c config.Config
 	conf.MustLoad(*configFile, &c)
 	config.SaveConf(c)
-	ctx := svc.NewServiceContext(c)
+	ctx := svc.NewSolServiceContext(c)
 
 	// 此s是consumer服务的server
 	// 创建service组：实现多个服务的统一管理

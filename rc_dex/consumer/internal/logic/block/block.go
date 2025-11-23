@@ -410,7 +410,7 @@ func DecodeInitAccountInstruction(tx *client.BlockTransaction, tokenAccountMap m
 func DecodeTokenTransfer(accountKeys []common.PublicKey, instruction *solTypes.CompiledInstruction) (transfer *token.TransferParam, err error) {
 	transfer = &token.TransferParam{}
 	// 解析transfer指令
-	if accountKeys[instruction.ProgramIDIndex].String() == common.Token2022ProgramID.String() {
+	if accountKeys[instruction.ProgramIDIndex].String() == common.Token2022ProgramID.String() { // Token2022ProgramID
 		// Instruction Accounts 参与指令的账户在交易账户列表中的索引，source、destination、authority 三个账户
 		if len(instruction.Accounts) < 3 {
 			err = errors.New("not enough accounts")
@@ -418,7 +418,7 @@ func DecodeTokenTransfer(accountKeys []common.PublicKey, instruction *solTypes.C
 		}
 		// Instruction Data ：指令的二进制数据（传给程序的具体参数arguments） 两个参数，discriminator描述符、Amount数量
 		if len(instruction.Data) < 1 {
-			err = errors.New("data len to0 small")
+			err = errors.New("data len too small")
 			return
 		}
 		// 第一个参数discriminator描述符 判断指令类型是 transfer 还是 transferChecked(3和12 只是索引值)
@@ -459,7 +459,7 @@ func DecodeTokenTransfer(accountKeys []common.PublicKey, instruction *solTypes.C
 		return transfer, nil
 	}
 
-	if accountKeys[instruction.ProgramIDIndex].String() != ProgramStrToken { // 检查指令是否是代币程序
+	if accountKeys[instruction.ProgramIDIndex].String() != ProgramStrToken { // 检查指令是否是代币程序 //TokenProgramID
 		err = errors.New("not token program")
 		return
 	}

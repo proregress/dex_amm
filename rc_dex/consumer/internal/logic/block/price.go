@@ -80,8 +80,8 @@ func (s *BlockService) GetBlockSolPrice(ctx context.Context, block *client.Block
 	}
 
 	// 遍历交易
-	for i := range block.Transactions {
-		tx := &block.Transactions[i]
+	for i := range block.Transactions { // ‼️这里是只获取索引的写法
+		tx := &block.Transactions[i] // ‼️通过索引访问元素并取地址，如果直接写成for i,tx := range xxx，tx是值拷贝，取&tx得到的是副本地址（临时变量的地址），不指向原数据（不是原切片的元素地址）
 		//hash := base58.Encode(tx.Transaction.Signatures[0]) // todo: delete me
 		//
 		//_ = hash

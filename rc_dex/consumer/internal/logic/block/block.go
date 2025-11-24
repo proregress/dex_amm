@@ -18,6 +18,7 @@ import (
 	solTypes "github.com/blocto/solana-go-sdk/types"
 	"github.com/duke-git/lancet/v2/slice"
 	"github.com/gorilla/websocket"
+	"github.com/mr-tron/base58"
 	"github.com/panjf2000/ants/v2"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/threading"
@@ -116,8 +117,6 @@ func (s *BlockService) GetBlockFromHttp() {
 }
 
 func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
-	// 监听
-	beginTime := time.Now()
 	if slot == 0 {
 		return
 	}
@@ -142,10 +141,6 @@ func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
 	// 从上面拿到的blockInfo将信息设置进block对象中
 	if blockInfo.BlockTime != nil {
 		block.BlockTime = *blockInfo.BlockTime
-		blockTime := blockInfo.BlockTime.Format("2006-01-02 15:04:05")
-		s.Infof("processBlock:%v getBlockInfo blockTime: %v,cur: %v, dur: %v, queue size: %v", slot, blockTime, time.Now().Format("15:04:05"), time.Since(beginTime), len(s.slotChannel))
-	} else {
-		s.Infof("processBlock:%v getBlockInfo blockTime is nil,cur: %v, dur: %v, queue size: %v", slot, time.Now().Format("15:04:05"), time.Since(beginTime), len(s.slotChannel))
 	}
 
 	if blockInfo.BlockHeight != nil {
@@ -164,7 +159,15 @@ func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
 
 	// 通过slice组件遍历transactions，拿到每一个交易对象tx
 	slice.ForEach(blockInfo.Transactions, func(index int, tx client.BlockTransaction) {
-		DecodeTx(&tx)
+
+		decodeTx := &DecodedTx{
+			BlockDb:         block,
+			Tx:              &tx,
+			TxIndex:         index,
+			TokenAccountMap: tokenAccountMap,
+		}
+
+		DecodeTx(ctx, s.sc, decodeTx)
 	})
 
 	// 将block对象插入数据库
@@ -174,41 +177,55 @@ func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
 	}
 }
 
-func DecodeTx(tx *client.BlockTransaction) {
-	if tx == nil {
+func DecodeTx(ctx context.Context, sc *svc.ServiceContext, dtx *DecodedTx) {
+	if dtx.Tx == nil || dtx.BlockDb == nil {
 		return
 	}
 
+	tx := dtx.Tx
+	dtx.TxHash = base58.Encode(tx.Transaction.Signatures[0])
+
+	if tx.Meta.Err != nil {
+		return
+	}
+
+	dtx.InnerInstructionMap = GetInnerInstructionMap(tx)
 	// Instructions是交易中的所有指令，遍历每一个指令inst
 	for i := range tx.Transaction.Message.Instructions {
 		inst := &tx.Transaction.Message.Instructions[i]
-		err := DecodeInstruction(inst, tx)
+		err := DecodeInstruction(ctx, sc, dtx, inst, i)
 		if err != nil {
 			return
 		}
 	}
 }
 
-func DecodeInstruction(inst *types.CompiledInstruction, tx *client.BlockTransaction) (err error) {
-	if inst == nil {
-		return errors.New("instruction is null")
-	}
-
-	if len(tx.AccountKeys) == 0 {
+func DecodeInstruction(ctx context.Context, sc *svc.ServiceContext, dtx *DecodedTx, instruction *solTypes.CompiledInstruction, index int) (err error) {
+	if len(dtx.Tx.AccountKeys) == 0 {
 		return errors.New("account keys is empty")
 	}
 
+	if int(instruction.ProgramIDIndex) >= len(dtx.Tx.AccountKeys) {
+		return fmt.Errorf("program ID index %d out of bounds for account keys length %d", instruction.ProgramIDIndex, len(dtx.Tx.AccountKeys))
+	}
+
+	tx := dtx.Tx
 	// AccountKeys是当前交易中的所有指令的账户id
 	// ProgramIDIndex是当前指令的账户id索引
-	program := tx.AccountKeys[inst.ProgramIDIndex].String()
-	// 根据programID，调用不同的解码函数
+	program := tx.AccountKeys[instruction.ProgramIDIndex].String()
 
-	// 过滤
 	switch program {
 	case ProgramStrPumpFun:
-		return DecodePumpFunInstruction(inst, tx)
+		return DecodePumpFunInstruction(instruction, tx)
 	case ProgramStrPumpFunAMM:
-		return DecodePumpFunAMMInstruction(inst, tx)
+		decoder := &PumpAmmDecoder{
+			ctx:                 ctx,
+			svcCtx:              sc,
+			dtx:                 dtx,
+			compiledInstruction: instruction,
+		}
+		decoder.DecodePumpFunAMMInstruction()
+		return
 	default:
 		return ErrUnknowProgram
 	}

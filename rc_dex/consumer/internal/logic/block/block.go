@@ -117,6 +117,13 @@ func (s *BlockService) GetBlockFromHttp() {
 	}
 }
 
+func (s *BlockService) FillTradeWithPairInfo(trade *types.TradeWithPair, slot int64) {
+	trade.Slot = slot
+	trade.BlockNum = slot
+	trade.ChainIdInt = constants.SolChainIdInt
+	trade.ChainId = constants.SolChainId
+}
+
 func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
 	if slot == 0 {
 		return
@@ -207,7 +214,85 @@ func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
 		trades = append(trades, trade...)
 	})
 
-	// 将block对象插入数据库
+	// Step4: 将成交按 Pair 归类，方便后续批量写入
+	tradeMap := make(map[string][]*types.TradeWithPair)
+
+	pumpSwapCount := 0
+	pumpFunCount := 0
+
+	for _, trade := range trades {
+		if len(trade.PairAddr) > 0 {
+			tradeMap[trade.PairAddr] = append(tradeMap[trade.PairAddr], trade)
+		}
+	}
+
+	for _, value := range tradeMap {
+		// 简单统计不同 Swap 的成交数量，方便监控
+		if value[0].SwapName == constants.PumpFun {
+			pumpFunCount++
+			continue
+		}
+		if value[0].SwapName == constants.PumpSwap {
+			pumpSwapCount++
+			continue
+		}
+	}
+
+	{
+		// 额外挑出 Mint 行为，触发 Token 总量刷新
+		tokenMints := slice.Filter[*types.TradeWithPair](trades, func(_ int, item *types.TradeWithPair) bool {
+			if item != nil && item.Type == types.TradeTokenMint {
+				return true
+			}
+			return false
+		})
+
+		s.UpdateTokenMints(ctx, tokenMints)
+		s.Infof("processBlock:%v UpdateTokenMints size: %v, dur: %v, tokenMints: %v", slot, len(tokenMints), time.Since(beginTime), len(tokenMints))
+	}
+
+	{
+		// 额外挑出 Burn 行为，触发 Token 总量刷新
+		tokenBurns := slice.Filter[*types.TradeWithPair](trades, func(_ int, item *types.TradeWithPair) bool {
+			if item != nil && item.Type == types.TradeTokenBurn {
+				return true
+			}
+			return false
+		})
+
+		s.UpdateTokenBurns(ctx, tokenBurns)
+		s.Infof("processBlock:%v UpdateTokenBurns size: %v, dur: %v, tokenBurns: %v", slot, len(tokenBurns), time.Since(beginTime), len(tokenBurns))
+	}
+
+	//并发处理： 保存交易信息，保存token账户信息
+	group := threading.NewRoutineGroup()
+	group.RunSafe(func() {
+		// Step5: 写入成交信息 & TokenAccount 快照
+		s.SaveTrades(ctx, constants.SolChainIdInt, tradeMap)
+		s.Infof("processBlock:%v saveTrades tx_size: %v, dur: %v, trade_size: %v", slot, len(blockInfo.Transactions), time.Since(beginTime), len(trades))
+
+		s.SaveTokenAccounts(ctx, trades, tokenAccountMap)
+		s.Infof("processBlock:%v saveTokenAccounts tx_size: %v, dur: %v, trade_size: %v", slot, len(blockInfo.Transactions), time.Since(beginTime), len(trades))
+	})
+
+	// pump swap
+	group.RunSafe(func() {
+		// Step6: 针对 PumpSwap 交易补充池子元数据
+		slice.ForEach(trades, func(_ int, trade *types.TradeWithPair) {
+			if trade.SwapName == constants.PumpSwap || trade.SwapName == "PumpSwap" {
+				if trade.Type == types.TradeTypeBuy || trade.Type == types.TradeTypeSell {
+					if err = s.SavePumpSwapPoolInfo(ctx, trade); err != nil {
+						s.Errorf("processBlock:%v SavePumpSwapPoolInfo err: %v", slot, err)
+					}
+				}
+
+			}
+		})
+	})
+
+	group.Wait()
+
+	// Step7: 区块落库，标识处理完成
 	err = s.sc.BlockModel.Insert(ctx, block)
 	if err != nil {
 		s.Error("insert block error", err)

@@ -4,16 +4,20 @@ import (
 	"fmt"
 
 	"github.com/blocto/solana-go-sdk/client"
-	"github.com/blocto/solana-go-sdk/types"
+	solTypes "github.com/blocto/solana-go-sdk/types"
 	"github.com/mr-tron/base58"
+	"richcode.cc/dex/pkg/types"
 )
 
-func DecodePumpFunInstruction(inst *types.CompiledInstruction, tx *client.BlockTransaction) (err error) {
-	fmt.Println("pump.fun transactions", base58.Encode(tx.Transaction.Signatures[0]))
-	return
-}
+const (
+	PumpStatusNotStart  = 0
+	PumpStatusCreate    = -1
+	PumpStatusTrading   = 1
+	PumpStatusMigrating = 2
+	PumpStatusEnd       = 3
+)
 
-func DecodeRaydiumInstruction(inst *types.CompiledInstruction, tx *client.BlockTransaction) (err error) {
+func DecodePumpFunInstruction(inst *solTypes.CompiledInstruction, tx *client.BlockTransaction) (trade *types.TradeWithPair, err error) {
 	fmt.Println("pump.fun transactions", base58.Encode(tx.Transaction.Signatures[0]))
 	return
 }

@@ -14,7 +14,6 @@ import (
 	"github.com/blocto/solana-go-sdk/common"
 	"github.com/blocto/solana-go-sdk/program/token"
 	"github.com/blocto/solana-go-sdk/rpc"
-	"github.com/blocto/solana-go-sdk/types"
 	solTypes "github.com/blocto/solana-go-sdk/types"
 	"github.com/duke-git/lancet/v2/slice"
 	"github.com/gorilla/websocket"
@@ -26,6 +25,7 @@ import (
 	"richcode.cc/dex/consumer/internal/svc"
 	"richcode.cc/dex/model/solmodel"
 	"richcode.cc/dex/pkg/constants"
+	"richcode.cc/dex/pkg/types"
 )
 
 var ErrServiceStop = errors.New("service stop")
@@ -45,6 +45,7 @@ type BlockService struct {
 	ctx         context.Context
 	cancel      func(err error)
 	slotChannel chan uint64
+	slot        uint64
 	Conn        *websocket.Conn
 	solPrice    float64
 	name        string
@@ -121,6 +122,11 @@ func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
 		return
 	}
 
+	// Step0: 初始化区块对象，并将状态默认标记为失败，后续流程成功再回写
+	beginTime := time.Now()
+
+	s.slot = uint64(slot)
+
 	// 创建block对象
 	block := &solmodel.Block{
 		Slot:   slot,
@@ -138,7 +144,7 @@ func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
 		_ = s.sc.BlockModel.Insert(ctx, block)
 		return
 	}
-	// 从上面拿到的blockInfo将信息设置进block对象中
+	// Step1: 从上面拿到的blockInfo将信息设置进block对象中
 	if blockInfo.BlockTime != nil {
 		block.BlockTime = *blockInfo.BlockTime
 	}
@@ -148,7 +154,7 @@ func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
 	}
 	block.Status = constants.BlockProcessed
 
-	// 获取 sol 价格
+	// Step2: 计算当期 SOL 价格，为后续成交估值提供基准
 	var tokenAccountMap = make(map[string]*TokenAccount) // string：ATA账户地址，map：通过ATA账户地址拿到完整的账户对象
 	solPrice := s.GetBlockSolPrice(ctx, blockInfo, tokenAccountMap)
 	if solPrice == 0 {
@@ -157,9 +163,17 @@ func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
 	// 区块 -> 交易 -> 转账（Transfer）SOL-(USDT/USDC) -> (USDT|USDC) / SOL = 价格
 	block.SolPrice = solPrice
 
-	// 通过slice组件遍历transactions，拿到每一个交易对象tx
-	slice.ForEach(blockInfo.Transactions, func(index int, tx client.BlockTransaction) {
+	// 初始化一个存放交易信息的切片，初始容量设为1000
+	// 后续会把从区块中解析出来的交易(TradeWithPair)加入到这个切片中，便于统一处理（如分类落库等）
+	trades := make([]*types.TradeWithPair, 0, 1000)
 
+	// 通过slice组件遍历区块中的每一笔链上交易，进行处理，即遍历transactions，拿到每一个交易对象tx
+	slice.ForEach(blockInfo.Transactions, func(index int, tx client.BlockTransaction) {
+		// Step3: 构造解码上下文。这里新建一个 DecodedTx 结构体用来保存当前交易的相关信息：
+		// BlockDb            当前处理的区块指针
+		// Tx                 当前遍历到的链上交易指针
+		// TxIndex            交易在区块内的序号
+		// TokenAccountMap    本次区块处理中维护的token账户（复用，提升效率）
 		decodeTx := &DecodedTx{
 			BlockDb:         block,
 			Tx:              &tx,
@@ -167,7 +181,30 @@ func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
 			TokenAccountMap: tokenAccountMap,
 		}
 
-		DecodeTx(ctx, s.sc, decodeTx)
+		// 解码链上交易，返回解码后的 TradeWithPair 切片
+		trade, err := DecodeTx(ctx, s.sc, decodeTx)
+		if err != nil {
+			// 如果是未识别的合约（unknow program），则直接跳过此条
+			if strings.Contains(err.Error(), "unknow program") {
+				return
+			}
+			// 其他解码出错则输出日志并跳过
+			fmt.Println("decode tx failed: ", err.Error())
+			return
+		}
+
+		// 对解码出来的 trade 结果再次过滤，只保留非空项；
+		// 并填充 TradeWithPair 的补充信息（如引用了Slot等元数据）
+		trade = slice.Filter(trade, func(index int, item *types.TradeWithPair) bool {
+			if item == nil {
+				return false
+			}
+			s.FillTradeWithPairInfo(item, slot)
+			return true
+		})
+
+		// 将本笔交易对应的所有成交记入 trades 切片，后面统一处理
+		trades = append(trades, trade...)
 	})
 
 	// 将block对象插入数据库
@@ -177,7 +214,7 @@ func (s *BlockService) ProcessBlock(ctx context.Context, slot int64) {
 	}
 }
 
-func DecodeTx(ctx context.Context, sc *svc.ServiceContext, dtx *DecodedTx) {
+func DecodeTx(ctx context.Context, sc *svc.ServiceContext, dtx *DecodedTx) (trades []*types.TradeWithPair, err error) {
 	if dtx.Tx == nil || dtx.BlockDb == nil {
 		return
 	}
@@ -190,23 +227,28 @@ func DecodeTx(ctx context.Context, sc *svc.ServiceContext, dtx *DecodedTx) {
 	}
 
 	dtx.InnerInstructionMap = GetInnerInstructionMap(tx)
+
+	// 遍历交易内所有指令，挨个解析生成业务侧的成交结构
 	// Instructions是交易中的所有指令，遍历每一个指令inst
 	for i := range tx.Transaction.Message.Instructions {
 		inst := &tx.Transaction.Message.Instructions[i]
-		err := DecodeInstruction(ctx, sc, dtx, inst, i)
+		var trade *types.TradeWithPair // tradewithpair ：对应交易对的数据，即池子的数据
+		trade, err = DecodeInstruction(ctx, sc, dtx, inst, i)
 		if err != nil {
-			return
+			return nil, err
 		}
+		trades = append(trades, trade)
 	}
+	return
 }
 
-func DecodeInstruction(ctx context.Context, sc *svc.ServiceContext, dtx *DecodedTx, instruction *solTypes.CompiledInstruction, index int) (err error) {
+func DecodeInstruction(ctx context.Context, sc *svc.ServiceContext, dtx *DecodedTx, instruction *solTypes.CompiledInstruction, index int) (trade *types.TradeWithPair, err error) {
 	if len(dtx.Tx.AccountKeys) == 0 {
-		return errors.New("account keys is empty")
+		return nil, errors.New("account keys is empty")
 	}
 
 	if int(instruction.ProgramIDIndex) >= len(dtx.Tx.AccountKeys) {
-		return fmt.Errorf("program ID index %d out of bounds for account keys length %d", instruction.ProgramIDIndex, len(dtx.Tx.AccountKeys))
+		return nil, fmt.Errorf("program ID index %d out of bounds for account keys length %d", instruction.ProgramIDIndex, len(dtx.Tx.AccountKeys))
 	}
 
 	tx := dtx.Tx
@@ -216,7 +258,8 @@ func DecodeInstruction(ctx context.Context, sc *svc.ServiceContext, dtx *Decoded
 
 	switch program {
 	case ProgramStrPumpFun:
-		return DecodePumpFunInstruction(instruction, tx)
+		trade, err = DecodePumpFunInstruction(instruction, tx)
+		return
 	case ProgramStrPumpFunAMM:
 		decoder := &PumpAmmDecoder{
 			ctx:                 ctx,
@@ -224,10 +267,10 @@ func DecodeInstruction(ctx context.Context, sc *svc.ServiceContext, dtx *Decoded
 			dtx:                 dtx,
 			compiledInstruction: instruction,
 		}
-		decoder.DecodePumpFunAMMInstruction()
+		trade, err = decoder.DecodePumpFunAMMInstruction()
 		return
 	default:
-		return ErrUnknowProgram
+		return nil, ErrUnknowProgram
 	}
 }
 
@@ -334,7 +377,7 @@ func FillTokenAccountMap(tx *client.BlockTransaction, tokenAccountMapIn map[stri
 //   - tx: 区块交易对象，包含账户密钥和交易信息
 //   - tokenAccountMap: 代币账户映射表，key 为代币账户地址，value 为代币账户详细信息
 //   - instruction: 编译后的指令对象，包含指令类型、账户索引和数据
-func DecodeInitAccountInstruction(tx *client.BlockTransaction, tokenAccountMap map[string]*TokenAccount, instruction *types.CompiledInstruction) {
+func DecodeInitAccountInstruction(tx *client.BlockTransaction, tokenAccountMap map[string]*TokenAccount, instruction *solTypes.CompiledInstruction) {
 	// 如果指令数据为空，无法解析，直接返回
 	if len(instruction.Data) == 0 {
 		return

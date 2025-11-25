@@ -2,7 +2,9 @@ package svc
 
 import (
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/zeromicro/go-zero/core/logx"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 	"richcode.cc/dex/consumer/internal/config"
 	"richcode.cc/dex/model/solmodel"
 )
@@ -29,8 +32,13 @@ type ServiceContext struct {
 	solClient      *solclient.Client
 	solClients     []*solclient.Client
 
-	/* 区块模型 */
-	BlockModel solmodel.BlockModel
+	/* 各种模型 */
+	BlockModel           solmodel.BlockModel           /* 区块模型 */
+	PairModel            solmodel.PairModel            /* 交易对模型 or 池子模型？？ */
+	TokenModel           solmodel.TokenModel           /* 代币模型 */
+	TradeModel           solmodel.TradeModel           /* 交易模型 */
+	PumpAmmInfoModel     solmodel.PumpAmmInfoModel     /* Pump AMM 信息模型 */
+	SolTokenAccountModel solmodel.SolTokenAccountModel /* SOL 账户模型 */
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
@@ -59,8 +67,19 @@ func NewSolServiceContext(c config.Config) *ServiceContext {
 		c.MySQLConfig.Port,
 		c.MySQLConfig.DBName,
 	)
+	newLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		logger.Config{
+			SlowThreshold:             200 * time.Millisecond, // 慢 sql 阈值
+			LogLevel:                  logger.Warn,            // 日志级别
+			IgnoreRecordNotFoundError: true,                   // 忽略 record not found
+			Colorful:                  true,
+		},
+	)
 	// 使用mysql驱动连接数据库gorm
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{}) // 建立连接
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		Logger: newLogger,
+	}) // 建立连接
 	if err != nil {
 		panic(fmt.Sprintf("failed to connect database: %v", err))
 	}
@@ -70,9 +89,14 @@ func NewSolServiceContext(c config.Config) *ServiceContext {
 
 	fmt.Println("solClients: ", c.Sol.NodeUrl)
 	return &ServiceContext{
-		Config:     c,
-		solClients: solClients,
-		BlockModel: blockModel,
+		Config:               c,
+		solClients:           solClients,
+		BlockModel:           blockModel,
+		PairModel:            solmodel.NewPairModel(db),
+		TokenModel:           solmodel.NewTokenModel(db),
+		TradeModel:           solmodel.NewTradeModel(db),
+		PumpAmmInfoModel:     solmodel.NewPumpAmmInfoModel(db),
+		SolTokenAccountModel: solmodel.NewSolTokenAccountModel(db),
 	}
 }
 
